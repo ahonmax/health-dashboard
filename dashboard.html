@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oura</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── NAV ── */
+  nav {
+    background: rgba(245,245,247,.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(0,0,0,.08);
+    position: sticky; top: 0; z-index: 10;
+    padding: 14px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  nav .brand { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+  .day-nav { display: flex; align-items: center; gap: 12px; }
+  .day-nav button {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: none; background: rgba(0,0,0,.06);
+    color: #1d1d1f; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  .day-nav button:hover { background: rgba(0,0,0,.12); }
+  .day-nav button:disabled { opacity: .3; cursor: default; }
+  #dateLabel { font-size: 15px; font-weight: 500; min-width: 160px; text-align: center; }
+  input[type="date"] {
+    border: none; background: transparent; font-size: 15px; font-weight: 500;
+    font-family: inherit; color: #1d1d1f; cursor: pointer; text-align: center;
+    outline: none; display: none;
+  }
+  .today-btn {
+    font-size: 13px; color: #007AFF; font-weight: 500;
+    border: none; background: none; cursor: pointer; padding: 0;
+  }
+  .today-btn:hover { opacity: .7; }
+
+  /* ── MAIN ── */
+  main { max-width: 680px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  /* ── SCORE CARDS ── */
+  .scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .score-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .score-card .sc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: #6e6e73; margin-bottom: 10px; }
+  .score-card .sc-num { font-size: 48px; font-weight: 300; line-height: 1; letter-spacing: -1px; }
+  .score-card .sc-bar { width: 100%; height: 3px; background: #f0f0f0; border-radius: 2px; margin-top: 12px; overflow: hidden; }
+  .score-card .sc-fill { height: 100%; border-radius: 2px; background: #1d1d1f; transition: width .5s ease; }
+  .score-card.sleep    .sc-num  { color: #1d1d1f; }
+  .score-card.sleep    .sc-fill { background: #aeaeb2; }
+  .score-card.ready    .sc-num  { color: #1d1d1f; }
+  .score-card.ready    .sc-fill { background: #aeaeb2; }
+  .score-card.activity .sc-num  { color: #1d1d1f; }
+  .score-card.activity .sc-fill { background: #aeaeb2; }
+
+  /* ── SECTION ── */
+  .section {
+    background: #fff;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    margin-bottom: 12px;
+  }
+  .section h2 {
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .6px; color: #6e6e73; margin-bottom: 18px;
+  }
+
+  /* ── SLEEP STAGES TIMELINE ── */
+  .stage-timeline { display: flex; height: 28px; border-radius: 8px; overflow: hidden; gap: 1px; }
+  .stage-seg { flex-shrink: 0; }
+
+  .stage-legend { display: flex; gap: 18px; margin-top: 12px; }
+  .stage-legend span { font-size: 12px; color: #6e6e73; display: flex; align-items: center; gap: 6px; }
+  .stage-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+  .stage-legend .l-deep::before  { background: #1d1d1f; }
+  .stage-legend .l-rem::before   { background: #636366; }
+  .stage-legend .l-light::before { background: #aeaeb2; }
+  .stage-legend .l-awake::before { background: #e5e5ea; }
+
+  /* ── METRICS GRID ── */
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #f0f0f0; border-radius: 16px; overflow: hidden; }
+  .metric { background: #fff; padding: 18px 20px; }
+  .metric .m-label { font-size: 12px; color: #6e6e73; margin-bottom: 4px; }
+  .metric .m-val { font-size: 26px; font-weight: 300; letter-spacing: -.5px; color: #1d1d1f; }
+  .metric .m-unit { font-size: 13px; color: #6e6e73; margin-left: 2px; }
+  .metric.top-left  { border-radius: 16px 0 0 0; }
+  .metric.top-right { border-radius: 0 16px 0 0; }
+  .metric.bot-left  { border-radius: 0 0 0 16px; }
+  .metric.bot-right { border-radius: 0 0 16px 0; }
+
+  /* ── SLEEP DURATION BAR ── */
+  .dur-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+  .dur-total { font-size: 36px; font-weight: 300; letter-spacing: -.5px; }
+  .dur-unit { font-size: 15px; color: #6e6e73; }
+  .dur-bars { display: flex; flex-direction: column; gap: 8px; }
+  .dur-bar-row { display: flex; align-items: center; gap: 10px; }
+  .dur-bar-row .bar-label { font-size: 12px; color: #6e6e73; width: 36px; flex-shrink: 0; }
+  .dur-bar-row .bar-track { flex: 1; height: 5px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+  .dur-bar-row .bar-fill  { height: 100%; border-radius: 3px; transition: width .5s; }
+  .dur-bar-row .bar-val   { font-size: 12px; color: #1d1d1f; width: 36px; text-align: right; flex-shrink: 0; }
+
+  /* ── EMPTY ── */
+  .empty { text-align: center; color: #aeaeb2; font-size: 15px; padding: 40px 0; }
+
+  /* ── NO DATA ── */
+  #noData { display: none; }
+
+  @media (max-width: 480px) {
+    nav { padding: 12px 16px; }
+    main { padding: 20px 12px 48px; }
+    .scores { gap: 8px; }
+    .score-card { padding: 16px 12px; }
+    .score-card .sc-num { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">Oura</div>
+  <div class="day-nav">
+    <button id="prevDay">‹</button>
+    <div id="dateLabel" title="Click to pick date" style="cursor:pointer;" onclick="document.getElementById('datePicker').showPicker?.() || document.getElementById('datePicker').click()">
+      <input type="date" id="datePicker">
+      <span id="dateLabelText"></span>
+    </div>
+    <button id="nextDay">›</button>
+  </div>
+  <button class="today-btn" id="todayBtn">Today</button>
+</nav>
+
+<main>
+  <div id="noData" class="section"><div class="empty">No data for this day.</div></div>
+  <div id="content">
+    <div class="scores">
+      <div class="score-card sleep">
+        <div class="sc-label">Sleep</div>
+        <div class="sc-num" id="sleepScore">—</div>
+        <div class="sc-bar"><div class="sc-fill" id="sleepBar" style="width:0%"></div></div>
+      </div>
+      <div class="score-card ready">
+        <div class="sc-label">Readiness</div>
+        <div class="sc-num" id="readyScore">—</div>
+        <div class="sc-bar"><div class="sc-fill" id="readyBar" style="width:0%"></div></div>
+      </div>
+      <div class="score-card activity">
+        <div class="sc-label">Activity</div>
+        <div class="sc-num" id="actScore">—</div>
+        <div class="sc-bar"><div class="sc-fill" id="actBar" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="section" id="sleepSection">
+      <h2>Sleep</h2>
+      <div class="dur-row">
+        <div class="dur-total" id="durTotal">—</div>
+        <div class="dur-unit">total</div>
+      </div>
+      <div class="dur-bars">
+        <div class="dur-bar-row">
+          <div class="bar-label">Deep</div>
+          <div class="bar-track"><div class="bar-fill" id="deepFill" style="width:0%;background:#1d1d1f"></div></div>
+          <div class="bar-val" id="deepVal">—</div>
+        </div>
+        <div class="dur-bar-row">
+          <div class="bar-label">REM</div>
+          <div class="bar-track"><div class="bar-fill" id="remFill" style="width:0%;background:#636366"></div></div>
+          <div class="bar-val" id="remVal">—</div>
+        </div>
+        <div class="dur-bar-row">
+          <div class="bar-label">Light</div>
+          <div class="bar-track"><div class="bar-fill" id="lightFill" style="width:0%;background:#aeaeb2"></div></div>
+          <div class="bar-val" id="lightVal">—</div>
+        </div>
+      </div>
+      <div style="margin-top:20px;">
+        <div class="stage-timeline" id="stageTimeline"></div>
+        <div class="stage-legend">
+          <span class="l-deep">Deep</span>
+          <span class="l-rem">REM</span>
+          <span class="l-light">Light</span>
+          <span class="l-awake">Awake</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric top-left">
+        <div class="m-label">Heart Rate Variability</div>
+        <div class="m-val"><span id="mHRV">—</span><span class="m-unit">ms</span></div>
+      </div>
+      <div class="metric top-right">
+        <div class="m-label">Resting Heart Rate</div>
+        <div class="m-val"><span id="mHR">—</span><span class="m-unit">bpm</span></div>
+      </div>
+      <div class="metric bot-left">
+        <div class="m-label">Steps</div>
+        <div class="m-val"><span id="mSteps">—</span></div>
+      </div>
+      <div class="metric bot-right">
+        <div class="m-label">Active Calories</div>
+        <div class="m-val"><span id="mCal">—</span><span class="m-unit">kcal</span></div>
+      </div>
+    </div>
+
+    <div class="metrics" style="margin-top:12px;">
+      <div class="metric top-left">
+        <div class="m-label">Bedtime</div>
+        <div class="m-val" style="font-size:22px;" id="mBedtime">—</div>
+      </div>
+      <div class="metric top-right">
+        <div class="m-label">Wake Time</div>
+        <div class="m-val" style="font-size:22px;" id="mWake">—</div>
+      </div>
+      <div class="metric bot-left">
+        <div class="m-label">Respiratory Rate</div>
+        <div class="m-val"><span id="mBreath">—</span><span class="m-unit">/min</span></div>
+      </div>
+      <div class="metric bot-right">
+        <div class="m-label">Skin Temp</div>
+        <div class="m-val"><span id="mTemp">—</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── CSV PARSER ─────────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (!lines.length) return [];
+  const headers = lines[0].split(';');
+  return lines.slice(1).map(line => {
+    const cols = splitLine(line);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h.trim()] = (cols[i] || '').trim(); });
+    return obj;
+  }).filter(r => Object.values(r).some(v => v));
+}
+
+function splitLine(line) {
+  const cols = []; let cur = '', inQ = false;
+  for (const c of line) {
+    if (c === '"') { inQ = !inQ; cur += c; }
+    else if (c === ';' && !inQ) { cols.push(cur); cur = ''; }
+    else cur += c;
+  }
+  cols.push(cur);
+  return cols;
+}
+
+async function loadCSV(path) {
+  const r = await fetch(path);
+  return parseCSV(await r.text());
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function fmtTime(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+function fmtHM(secs) {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+function fmtNum(n) { return n && +n > 0 ? Math.round(+n).toLocaleString() : '—'; }
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let allData = {};
+let availableDays = [];
+let currentIdx = 0;
+
+function getCurrentDay() { return availableDays[currentIdx]; }
+
+// ── DATE NAV ─────────────────────────────────────────────────────────────────
+function updateDateLabel(day) {
+  const d = new Date(day + 'T12:00:00');
+  const today = new Date(); today.setHours(12,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  let label;
+  if (d.toDateString() === today.toDateString()) label = 'Today';
+  else if (d.toDateString() === yesterday.toDateString()) label = 'Yesterday';
+  else label = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
+  document.getElementById('dateLabelText').textContent = label;
+  document.getElementById('datePicker').value = day;
+  document.getElementById('prevDay').disabled = currentIdx === 0;
+  document.getElementById('nextDay').disabled = currentIdx === availableDays.length - 1;
+}
+
+// ── STAGE TIMELINE ────────────────────────────────────────────────────────────
+// sleep_phase_5_min: 1=deep 2=light 3=REM 4=awake
+const stageColors = { '1': '#1d1d1f', '2': '#aeaeb2', '3': '#636366', '4': '#e5e5ea' };
+
+function renderTimeline(phaseStr) {
+  const tl = document.getElementById('stageTimeline');
+  if (!phaseStr) { tl.innerHTML = '<div style="width:100%;background:#f0f0f0;border-radius:8px;height:28px;"></div>'; return; }
+  const chars = phaseStr.split('');
+  const total = chars.length;
+  tl.innerHTML = chars.map(c => {
+    const col = stageColors[c] || '#f0f0f0';
+    return `<div class="stage-seg" style="flex:1;background:${col};"></div>`;
+  }).join('');
+}
+
+// ── RENDER DAY ────────────────────────────────────────────────────────────────
+function renderDay(day) {
+  updateDateLabel(day);
+
+  const sleep  = allData.sleep.find(r => r.day === day);
+  const ready  = allData.readiness.find(r => r.day === day);
+  const act    = allData.activity.find(r => r.day === day);
+  // prefer long_sleep for the day
+  const smAll  = allData.sleepmodel.filter(r => r.day === day);
+  const sm     = smAll.find(r => r.type === 'long_sleep') || smAll.sort((a,b) => +(b.total_sleep_duration||0) - +(a.total_sleep_duration||0))[0];
+  const tempRec = allData.readiness.find(r => r.day === day);
+
+  const hasAny = sleep || ready || act || sm;
+  document.getElementById('noData').style.display = hasAny ? 'none' : 'block';
+  document.getElementById('content').style.display = hasAny ? 'block' : 'none';
+
+  // Scores
+  const setScore = (id, barId, val) => {
+    document.getElementById(id).textContent = val && +val > 0 ? +val : '—';
+    document.getElementById(barId).style.width = val && +val > 0 ? val + '%' : '0%';
+  };
+  setScore('sleepScore',  'sleepBar',  sleep?.score);
+  setScore('readyScore',  'readyBar',  ready?.score);
+  setScore('actScore',    'actBar',    act?.score);
+
+  // Sleep duration
+  if (sm && +sm.total_sleep_duration > 0) {
+    const total = +sm.total_sleep_duration;
+    const deep  = +(sm.deep_sleep_duration || 0);
+    const rem   = +(sm.rem_sleep_duration  || 0);
+    const light = Math.max(0, total - deep - rem);
+    document.getElementById('durTotal').textContent = fmtHM(total);
+    document.getElementById('deepFill').style.width  = (deep/total*100).toFixed(1) + '%';
+    document.getElementById('remFill').style.width   = (rem /total*100).toFixed(1) + '%';
+    document.getElementById('lightFill').style.width = (light/total*100).toFixed(1) + '%';
+    document.getElementById('deepVal').textContent   = fmtHM(deep);
+    document.getElementById('remVal').textContent    = fmtHM(rem);
+    document.getElementById('lightVal').textContent  = fmtHM(light);
+    renderTimeline(sm.sleep_phase_5_min);
+  } else {
+    document.getElementById('durTotal').textContent = '—';
+    ['deep','rem','light'].forEach(k => {
+      document.getElementById(k+'Fill').style.width = '0%';
+      document.getElementById(k+'Val').textContent = '—';
+    });
+    renderTimeline('');
+  }
+
+  // Metrics
+  document.getElementById('mHRV').textContent    = sm?.average_hrv && +sm.average_hrv > 0 ? Math.round(+sm.average_hrv) : '—';
+  document.getElementById('mHR').textContent     = sm?.lowest_heart_rate && +sm.lowest_heart_rate > 0 ? Math.round(+sm.lowest_heart_rate) : '—';
+  document.getElementById('mSteps').textContent  = act?.steps && +act.steps > 0 ? (+act.steps).toLocaleString() : '—';
+  document.getElementById('mCal').textContent    = act?.active_calories && +act.active_calories > 0 ? Math.round(+act.active_calories) : '—';
+  document.getElementById('mBedtime').textContent = fmtTime(sm?.bedtime_start);
+  document.getElementById('mWake').textContent   = fmtTime(sm?.bedtime_end);
+  document.getElementById('mBreath').textContent = sm?.average_breath && +sm.average_breath > 0 ? (+sm.average_breath).toFixed(1) : '—';
+
+  // Temp from readiness
+  const tempDev = tempRec?.temperature_deviation;
+  if (tempDev && tempDev !== '') {
+    const v = +tempDev;
+    const sign = v > 0 ? '+' : '';
+    document.getElementById('mTemp').textContent = sign + v.toFixed(2) + '°C';
+  } else {
+    document.getElementById('mTemp').textContent = '—';
+  }
+}
+
+// ── MAIN ─────────────────────────────────────────────────────────────────────
+async function main() {
+  const base = 'App%20Data/';
+  const [sleep, readiness, activity, sleepmodel] = await Promise.all([
+    loadCSV(base + 'dailysleep.csv'),
+    loadCSV(base + 'dailyreadiness.csv'),
+    loadCSV(base + 'dailyactivity.csv'),
+    loadCSV(base + 'sleepmodel.csv'),
+  ]);
+
+  allData = { sleep, readiness, activity, sleepmodel };
+
+  // Build sorted list of all days with any data
+  const daySet = new Set([
+    ...sleep.map(r => r.day),
+    ...readiness.map(r => r.day),
+    ...activity.map(r => r.day),
+  ]);
+  availableDays = [...daySet].filter(Boolean).sort();
+
+  // Start on latest available day
+  currentIdx = availableDays.length - 1;
+  renderDay(getCurrentDay());
+
+  // ── NAV BUTTONS ────────────────────────────────────────────────────────────
+  document.getElementById('prevDay').onclick = () => {
+    if (currentIdx > 0) { currentIdx--; renderDay(getCurrentDay()); }
+  };
+  document.getElementById('nextDay').onclick = () => {
+    if (currentIdx < availableDays.length - 1) { currentIdx++; renderDay(getCurrentDay()); }
+  };
+  document.getElementById('todayBtn').onclick = () => {
+    currentIdx = availableDays.length - 1;
+    renderDay(getCurrentDay());
+  };
+  document.getElementById('dateLabelText').onclick = () => {
+    document.getElementById('datePicker').style.display = 'block';
+    document.getElementById('datePicker').focus();
+    document.getElementById('datePicker').showPicker?.();
+  };
+  document.getElementById('datePicker').onchange = (e) => {
+    const picked = e.target.value;
+    const idx = availableDays.indexOf(picked);
+    if (idx !== -1) { currentIdx = idx; renderDay(getCurrentDay()); }
+    else {
+      // find closest
+      const nearest = availableDays.reduce((best, d) => Math.abs(new Date(d)-new Date(picked)) < Math.abs(new Date(best)-new Date(picked)) ? d : best);
+      currentIdx = availableDays.indexOf(nearest);
+      renderDay(getCurrentDay());
+    }
+    document.getElementById('datePicker').style.display = 'none';
+  };
+
+  // keyboard arrows
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft'  && currentIdx > 0)                       { currentIdx--; renderDay(getCurrentDay()); }
+    if (e.key === 'ArrowRight' && currentIdx < availableDays.length - 1) { currentIdx++; renderDay(getCurrentDay()); }
+  });
+}
+
+main().catch(e => console.error(e));
+</script>
+</body>
+</html>

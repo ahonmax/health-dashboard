@@ -1,0 +1,7 @@
+# Health data - kept local only
+*.csv
+App Data/
+Subscriptions/
+
+# macOS
+.DS_Store
