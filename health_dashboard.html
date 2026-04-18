@@ -243,9 +243,9 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartM
     const hh=h%24;
     const lbl=hh===0?'12am':hh<12?hh+'am':hh===12?'12pm':(hh-12)+'pm';
     const isMajor=(h%3===0);
-    xTicks+='<line x1="'+x.toFixed(1)+'" y1="'+aBot+'" x2="'+x.toFixed(1)+'" y2="'+(aBot+(isMajor?4:2))+'" stroke="'+c.grid+'" stroke-width="1"/>';
-    if(isMajor&&x>padL+4&&x<padL+cW+12)
-      xTicks+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7.5" fill="'+c.lbl+'">'+lbl+'</text>';
+    xTicks+='<line x1="'+x.toFixed(1)+'" y1="'+aBot+'" x2="'+x.toFixed(1)+'" y2="'+(aBot+(isMajor?5:3))+'" stroke="'+c.grid+'" stroke-width="1"/>';
+    if(x>padL+4&&x<padL+cW+12)
+      xTicks+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7" fill="'+c.lbl+'" opacity="'+(isMajor?'1':'0.55')+'">'+lbl+'</text>';
   }
 
   let legendHtml='<div style="display:flex;gap:14px;padding:8px 14px 12px;align-items:center;flex-wrap:wrap">';
@@ -392,7 +392,16 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
   const firstFullH=Math.ceil((bsTotalMin+1)/60);
   const shortSleep=totalMins<=240;
   const xAxisBaseY=hasGluc?H-padB:padT+stageH;
+  // Bedtime + wake time edge markers
+  const bsDate=new Date(startIso);
+  const bsLabel=bsDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase().replace(' ','');
+  const wakeDate=new Date(bsDate.getTime()+phases.length*5*60*1000);
+  const wakeLabel=wakeDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase().replace(' ','');
   let xlbls='';
+  xlbls+='<line x1="'+padL+'" y1="'+xAxisBaseY+'" x2="'+padL+'" y2="'+(xAxisBaseY+6)+'" stroke="'+c.stroke+'" stroke-width="1.5"/>';
+  xlbls+='<text x="'+padL+'" y="'+(H-3)+'" text-anchor="start" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+bsLabel+'</text>';
+  xlbls+='<line x1="'+(padL+cW)+'" y1="'+xAxisBaseY+'" x2="'+(padL+cW)+'" y2="'+(xAxisBaseY+6)+'" stroke="'+c.stroke+'" stroke-width="1.5"/>';
+  xlbls+='<text x="'+(padL+cW)+'" y="'+(H-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+wakeLabel+'</text>';
   for(let step=0;;step++){
     const clockH=(firstFullH+step)%24;
     const relMin=(firstFullH+step)*60-bsTotalMin;
@@ -403,8 +412,8 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
     const lbl=clockH===0?'12am':clockH<12?clockH+'am':clockH===12?'12pm':(clockH-12)+'pm';
     const isMajor=shortSleep||(step%3===0);
     xlbls+='<line x1="'+x.toFixed(1)+'" y1="'+xAxisBaseY+'" x2="'+x.toFixed(1)+'" y2="'+(xAxisBaseY+(isMajor?5:2.5))+'" stroke="'+c.grid+'" stroke-width="1"/>';
-    if(isMajor&&x>padL+4&&x<padL+cW+12)
-      xlbls+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7.5" fill="'+c.lbl+'">'+lbl+'</text>';
+    if(x>padL+4&&x<padL+cW-4)
+      xlbls+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7" fill="'+c.lbl+'" opacity="'+(isMajor?'1':'0.55')+'">'+lbl+'</text>';
   }
 
   const sleepGlucStats=(hasGluc&&sCnt>0)?'<div class="gluc-stats"><div class="gluc-stat"><span class="gluc-stat-name">Avg</span><span class="gluc-stat-val">'+(sSum/sCnt).toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Min</span><span class="gluc-stat-val">'+sMin[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Max</span><span class="gluc-stat-val">'+sMax[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Unit</span><span class="gluc-stat-val" style="font-size:11px;padding-top:2px">mmol/L</span></div></div>':'';
