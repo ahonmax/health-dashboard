@@ -157,7 +157,7 @@ const DAY_MINS=24*60;
 function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartMin){
   const c=svgC();
   const W=580, padL=28, padR=16, padT=4, padB=20;
-  const glucH=72, sepH=5, actH=26;
+  const glucH=100, sepH=5, actH=26;
   const H=padT+glucH+sepH+actH+padB;
   const cW=W-padL-padR;
   xStartMin=xStartMin||0;
@@ -187,10 +187,20 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartM
   glucSvg+='<line x1="'+padL+'" y1="'+gMidY+'" x2="'+(padL+cW)+'" y2="'+gMidY+'" stroke="'+c.grid+'" stroke-width="0.5"/>';
   glucSvg+='<text x="'+(padL-3)+'" y="'+(+gMidY+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+gMid+'</text>';
   glucSvg+='<text x="'+padL+'" y="'+(gTop+7)+'" font-size="7" fill="'+c.lbl+'" font-weight="600">mmol/L</text>';
+  let glucMin=null,glucMax=null,glucSum=0,glucCnt=0;
   if(gluc&&gluc.length>1){
     let pts=[];
-    gluc.forEach(([min,val])=>{if(val>0&&min>=xStartMin&&min<=xEndMin)pts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));});
+    gluc.forEach(([min,val])=>{
+      if(val>0&&min>=xStartMin&&min<=xEndMin){
+        pts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));
+        glucSum+=val; glucCnt++;
+        if(!glucMin||val<glucMin[1]) glucMin=[min,val];
+        if(!glucMax||val>glucMax[1]) glucMax=[min,val];
+      }
+    });
     if(pts.length>1) glucSvg+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    if(glucMin){const mx=+toX(glucMin[0]).toFixed(1),my=+toGY(glucMin[1]).toFixed(1);const ly=my-9>=gTop?my-9:my+9;glucSvg+='<circle cx="'+mx+'" cy="'+my+'" r="2.5" fill="'+c.stroke+'"/><text x="'+mx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+glucMin[1].toFixed(1)+'</text>';}
+    if(glucMax){const mx=+toX(glucMax[0]).toFixed(1),my=+toGY(glucMax[1]).toFixed(1);const ly=my+9<=gBot?my+9:my-4;glucSvg+='<circle cx="'+mx+'" cy="'+my+'" r="2.5" fill="'+c.stroke+'"/><text x="'+mx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+glucMax[1].toFixed(1)+'</text>';}
   }
 
   // Activity panel
@@ -247,8 +257,9 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartM
   });
   legendHtml+='</div>';
 
+  const glucStats=glucCnt>0?'<div class="gluc-stats"><div class="gluc-stat"><span class="gluc-stat-name">Avg</span><span class="gluc-stat-val">'+(glucSum/glucCnt).toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Min</span><span class="gluc-stat-val">'+glucMin[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Max</span><span class="gluc-stat-val">'+glucMax[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Unit</span><span class="gluc-stat-val" style="font-size:11px;padding-top:2px">mmol/L</span></div></div>':'';
   return '<div class="svg-wrap" style="padding-bottom:4px"><svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'
-    +glucSvg+actSvg+sepLine+xTicks+'</svg></div>'+legendHtml;
+    +glucSvg+actSvg+sepLine+xTicks+'</svg></div>'+legendHtml+glucStats;
 }
 
 /* ── SLEEP GLUCOSE CHART ── */
@@ -316,7 +327,7 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
   const W=580,padL=36,padR=4,padT=4,padB=20,cW=W-padL-padR;
   const stageH=72,cH=stageH,rowH=cH/4;
   const hasGluc=sleepGluc&&sleepGluc.length>1;
-  const glucH=hasGluc?52:0, sepH=hasGluc?8:0;
+  const glucH=hasGluc?72:0, sepH=hasGluc?8:0;
   const H=padT+stageH+sepH+glucH+padB;
   const totalMins=(sleepMins&&sleepMins>0)?sleepMins:phases.length*5;
   const toX=relMin=>padL+(relMin/totalMins)*cW;
@@ -342,7 +353,7 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
   fillPath+=' L '+(padL+cW)+' '+(padT+cH)+' Z';
 
   // Glucose panel
-  let glucSvg='';
+  let glucSvg='',sMin=null,sMax=null,sSum=0,sCnt=0;
   if(hasGluc){
     const gTop=padT+stageH+sepH, gBot=gTop+glucH;
     const vals=sleepGluc.filter(p=>p[1]>0).map(p=>p[1]);
@@ -362,8 +373,17 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
     glucSvg+='<text x="'+(padL-3)+'" y="'+(+gMidY+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+gMid+'</text>';
     glucSvg+='<text x="'+padL+'" y="'+(gTop+7)+'" font-size="7" fill="'+c.lbl+'" font-weight="600">mmol/L</text>';
     let gPts=[];
-    sleepGluc.forEach(([min,val])=>{if(val>0)gPts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));});
+    sleepGluc.forEach(([min,val])=>{
+      if(val>0){
+        gPts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));
+        sSum+=val; sCnt++;
+        if(!sMin||val<sMin[1]) sMin=[min,val];
+        if(!sMax||val>sMax[1]) sMax=[min,val];
+      }
+    });
     if(gPts.length>1) glucSvg+='<polyline points="'+gPts.join(' ')+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    if(sMin){const mx=+toX(sMin[0]).toFixed(1),my=+toGY(sMin[1]).toFixed(1);const ly=my-9>=gTop?my-9:my+9;glucSvg+='<circle cx="'+mx+'" cy="'+my+'" r="2.5" fill="'+c.stroke+'"/><text x="'+mx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+sMin[1].toFixed(1)+'</text>';}
+    if(sMax){const mx=+toX(sMax[0]).toFixed(1),my=+toGY(sMax[1]).toFixed(1);const ly=my+9<=gBot?my+9:my-4;glucSvg+='<circle cx="'+mx+'" cy="'+my+'" r="2.5" fill="'+c.stroke+'"/><text x="'+mx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c.lbl+'">'+sMax[1].toFixed(1)+'</text>';}
   }
 
   // X-axis: tick every hour, label every 3h (or every hour if short sleep)
@@ -387,10 +407,11 @@ function hypnogram(phases,startIso,sleepGluc,sleepMins){
       xlbls+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7.5" fill="'+c.lbl+'">'+lbl+'</text>';
   }
 
+  const sleepGlucStats=(hasGluc&&sCnt>0)?'<div class="gluc-stats"><div class="gluc-stat"><span class="gluc-stat-name">Avg</span><span class="gluc-stat-val">'+(sSum/sCnt).toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Min</span><span class="gluc-stat-val">'+sMin[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Max</span><span class="gluc-stat-val">'+sMax[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Unit</span><span class="gluc-stat-val" style="font-size:11px;padding-top:2px">mmol/L</span></div></div>':'';
   return '<div class="svg-wrap"><svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'
     +out+'<path d="'+fillPath+'" fill="'+c.stroke+'" opacity="0.04"/>'
     +'<path d="'+path+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round"/>'
-    +glucSvg+xlbls+'</svg></div>';
+    +glucSvg+xlbls+'</svg></div>'+sleepGlucStats;
 }
 
 /* ── HR LINE CHART ── */
