@@ -248,13 +248,17 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartM
       xTicks+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7" fill="'+c.lbl+'" opacity="'+(isMajor?'1':'0.55')+'">'+lbl+'</text>';
   }
 
-  let legendHtml='<div style="display:flex;gap:14px;padding:8px 14px 12px;align-items:center;flex-wrap:wrap">';
-  legendHtml+='<div style="display:flex;align-items:center;gap:4px"><div style="width:18px;height:2px;background:'+c.stroke+'"></div><span style="font-size:11px;opacity:0.45">Glucose</span></div>';
-  legendHtml+='<div style="display:flex;align-items:center;gap:4px"><div style="width:12px;height:8px;border-radius:2px;background:'+c.zone+'"></div><span style="font-size:11px;opacity:0.45">Target 3.9–7.8</span></div>';
   const actItems=[{op:0.12,l:'Inactive'},{op:0.35,l:'Low'},{op:0.65,l:'Medium'},{op:1,l:'High'}];
+  let legendHtml='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px 12px;flex-wrap:wrap;gap:8px">';
+  legendHtml+='<div style="display:flex;gap:12px;align-items:center">';
   actItems.forEach(function(item){
     legendHtml+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:'+c.stroke+';opacity:'+item.op+'"></div><span style="font-size:11px;opacity:0.45">'+item.l+'</span></div>';
   });
+  legendHtml+='</div>';
+  legendHtml+='<div style="display:flex;gap:12px;align-items:center">';
+  legendHtml+='<div style="display:flex;align-items:center;gap:4px"><div style="width:18px;height:2px;background:'+c.stroke+'"></div><span style="font-size:11px;opacity:0.45">Glucose</span></div>';
+  legendHtml+='<div style="display:flex;align-items:center;gap:4px"><div style="width:12px;height:8px;border-radius:2px;background:'+c.zone+'"></div><span style="font-size:11px;opacity:0.45">Target 3.9–7.8</span></div>';
+  legendHtml+='</div>';
   legendHtml+='</div>';
 
   const glucStats=glucCnt>0?'<div class="gluc-stats"><div class="gluc-stat"><span class="gluc-stat-name">Avg</span><span class="gluc-stat-val">'+(glucSum/glucCnt).toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Min</span><span class="gluc-stat-val">'+glucMin[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Max</span><span class="gluc-stat-val">'+glucMax[1].toFixed(1)+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Unit</span><span class="gluc-stat-val" style="font-size:11px;padding-top:2px">mmol/L</span></div></div>':'';
