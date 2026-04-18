@@ -180,12 +180,12 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartM
     if(v<gMin||v>gMax) return;
     const y=toGY(v).toFixed(1);
     glucSvg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+cW)+'" y2="'+y+'" stroke="'+c.ref+'" stroke-width="0.5" stroke-dasharray="2 2"/>';
-    glucSvg+='<text x="'+(padL-8)+'" y="'+(+y+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+v+'</text>';
+    glucSvg+='<text x="'+(padL+cW+3)+'" y="'+(+y+3)+'" text-anchor="start" font-size="7" fill="'+c.lbl+'">'+v+'</text>';
   });
   const gMid=Math.round((gMin+gMax)/2);
   const gMidY=toGY(gMid).toFixed(1);
   glucSvg+='<line x1="'+padL+'" y1="'+gMidY+'" x2="'+(padL+cW)+'" y2="'+gMidY+'" stroke="'+c.grid+'" stroke-width="0.5"/>';
-  glucSvg+='<text x="'+(padL-8)+'" y="'+(+gMidY+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+gMid+'</text>';
+  glucSvg+='<text x="'+(padL-3)+'" y="'+(+gMidY+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+gMid+'</text>';
   glucSvg+='<text x="'+padL+'" y="'+(gTop+7)+'" font-size="7" fill="'+c.lbl+'" font-weight="600">mmol/L</text>';
   let glucMin=null,glucMax=null,glucSum=0,glucCnt=0;
   if(gluc&&gluc.length>1){
