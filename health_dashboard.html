@@ -154,17 +154,19 @@ const ACT_LBL={walking:'Walk',running:'Run',cycling:'Cycle',tennis:'Tennis',hous
 const GLUC_LOW=3.9, GLUC_HIGH=7.8;
 const DAY_MINS=24*60;
 
-function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin){
+function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin, xStartMin){
   const c=svgC();
   const W=580, padL=28, padR=16, padT=4, padB=20;
   const glucH=72, sepH=5, actH=26;
   const H=padT+glucH+sepH+actH+padB;
   const cW=W-padL-padR;
+  xStartMin=xStartMin||0;
   xEndMin=xEndMin||DAY_MINS;
-  const toX=min=>padL+(min/xEndMin)*cW;
+  const span=xEndMin-xStartMin||1;
+  const toX=min=>padL+((min-xStartMin)/span)*cW;
 
   // Glucose panel
-  const glucVals=gluc?gluc.filter(p=>p[0]<=xEndMin&&p[1]>0).map(p=>p[1]):[];
+  const glucVals=gluc?gluc.filter(p=>p[0]>=xStartMin&&p[0]<=xEndMin&&p[1]>0).map(p=>p[1]):[];
   const gMin=glucVals.length?Math.max(2,Math.min(...glucVals)-0.5):2;
   const gMax=glucVals.length?Math.min(22,Math.max(...glucVals)+0.5):15;
   const gRange=gMax-gMin||1;
@@ -187,7 +189,7 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin){
   glucSvg+='<text x="'+padL+'" y="'+(gTop+7)+'" font-size="7" fill="'+c.lbl+'" font-weight="600">mmol/L</text>';
   if(gluc&&gluc.length>1){
     let pts=[];
-    gluc.forEach(([min,val])=>{if(val>0&&min<=xEndMin)pts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));});
+    gluc.forEach(([min,val])=>{if(val>0&&min>=xStartMin&&min<=xEndMin)pts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));});
     if(pts.length>1) glucSvg+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
   }
 
@@ -223,11 +225,13 @@ function combinedChart(gluc, classStr, classStartIso, workouts, xEndMin){
 
   // Hourly x-axis ticks (major label every 3h, minor tick every 1h)
   let xTicks='';
+  const hStart=Math.floor(xStartMin/60);
   const hEnd=Math.ceil(xEndMin/60);
-  for(let h=0;h<=hEnd;h++){
+  for(let h=hStart;h<=hEnd;h++){
     const min=h*60; if(min>xEndMin+30) break;
     const x=toX(min); if(x<padL-2||x>padL+cW+12) continue;
-    const lbl=h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
+    const hh=h%24;
+    const lbl=hh===0?'12am':hh<12?hh+'am':hh===12?'12pm':(hh-12)+'pm';
     const isMajor=(h%3===0);
     xTicks+='<line x1="'+x.toFixed(1)+'" y1="'+aBot+'" x2="'+x.toFixed(1)+'" y2="'+(aBot+(isMajor?4:2))+'" stroke="'+c.grid+'" stroke-width="1"/>';
     if(isMajor&&x>padL+4&&x<padL+cW+12)
@@ -442,19 +446,38 @@ function renderDay(day){
   // Scores
   h+='<div class="card wide"><div class="card-label">Overview</div><div class="scores-grid"><div class="score-cell">'+ring(d.readiness?.score,'rr')+'<span class="score-lbl">Readiness</span></div><div class="score-cell">'+ring(d.sleep_score,'rs')+'<span class="score-lbl">Sleep</span></div><div class="score-cell">'+ring(d.activity?.score,'ra')+'<span class="score-lbl">Activity</span></div></div></div>';
 
-  // Movement + Glucose (waking hours only, trimmed at bedtime)
+  // Movement + Glucose (waking hours only: wake time → bedtime)
   const hasChart=d.gluc||d.activity?.class_5min;
-  let sleepStartMin=null;
-  if(d.sleep?.bedtime_start){
+  let wakeMin=0, bedMin=DAY_MINS;
+  // Wake time = when sleep ended today
+  if(d.sleep?.bedtime_end){
+    const beDay=d.sleep.bedtime_end.slice(0,10);
+    if(beDay===day){
+      const beHH=parseInt(d.sleep.bedtime_end.slice(11,13));
+      const beMM=parseInt(d.sleep.bedtime_end.slice(14,16));
+      wakeMin=beHH*60+beMM;
+    }
+  }
+  // Tonight's bedtime: check next day's sleep record (bedtime_start on current day = before midnight)
+  const nextIdx=DAYS.indexOf(day)+1;
+  const nextSl=nextIdx<DAYS.length?DATA[DAYS[nextIdx]]?.sleep:null;
+  if(nextSl?.bedtime_start){
+    const nsBsDay=nextSl.bedtime_start.slice(0,10);
+    if(nsBsDay===day){
+      const nsHH=parseInt(nextSl.bedtime_start.slice(11,13));
+      const nsMM=parseInt(nextSl.bedtime_start.slice(14,16));
+      bedMin=nsHH*60+nsMM;
+    }
+  } else if(d.sleep?.bedtime_start){
+    // Fallback: today's sleep.bedtime_start if it's in the evening
     const bsHH=parseInt(d.sleep.bedtime_start.slice(11,13));
     const bsMM=parseInt(d.sleep.bedtime_start.slice(14,16));
-    sleepStartMin=bsHH*60+bsMM;
-    // If sleep starts in early morning (< 14h = 840min) it belongs to prev night, don't trim today
-    if(sleepStartMin<840) sleepStartMin=null;
+    const bsMin=bsHH*60+bsMM;
+    if(bsMin>=840) bedMin=bsMin;
   }
   h+='<div class="card wide"><div class="card-label">Movement &amp; Glucose</div>';
   if(hasChart){
-    h+=combinedChart(d.gluc||null, d.activity?.class_5min||'', d.activity?.class_start||'', d.workouts||[], sleepStartMin||DAY_MINS);
+    h+=combinedChart(d.gluc||null, d.activity?.class_5min||'', d.activity?.class_start||'', d.workouts||[], bedMin, wakeMin);
   } else {
     h+='<div class="empty-note">No data for this day</div>';
   }
