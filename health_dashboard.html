@@ -310,10 +310,18 @@ function sleepGlucChart(sleepGluc, sleepMins, bedtimeStartIso){
 /* ── HYPNOGRAM ── */
 const STAGE_Y={1:3,2:1,3:2,4:0};
 const STAGE_LABELS=['AWAKE','REM','LIGHT','DEEP'];
-function hypnogram(phases,startIso){
+function hypnogram(phases,startIso,sleepGluc,sleepMins){
   if(!phases||phases.length<2) return '';
   const c=svgC();
-  const W=580,H=72,padL=36,padR=4,padT=4,padB=18,cW=W-padL-padR,cH=H-padT-padB,rowH=cH/4;
+  const W=580,padL=36,padR=4,padT=4,padB=20,cW=W-padL-padR;
+  const stageH=72,cH=stageH,rowH=cH/4;
+  const hasGluc=sleepGluc&&sleepGluc.length>1;
+  const glucH=hasGluc?52:0, sepH=hasGluc?8:0;
+  const H=padT+stageH+sepH+glucH+padB;
+  const totalMins=(sleepMins&&sleepMins>0)?sleepMins:phases.length*5;
+  const toX=relMin=>padL+(relMin/totalMins)*cW;
+
+  // Stage band backgrounds + labels
   let out='';
   for(let i=0;i<4;i++){
     out+='<rect x="'+padL+'" y="'+(padT+i*rowH)+'" width="'+cW+'" height="'+rowH+'" fill="'+c.bandFn(i)+'"/>';
@@ -321,6 +329,8 @@ function hypnogram(phases,startIso){
     out+='<text x="'+(padL-4)+'" y="'+(padT+i*rowH+rowH/2+3)+'" text-anchor="end" font-size="7" font-weight="600" fill="'+c.lbl+'">'+STAGE_LABELS[i]+'</text>';
   }
   out+='<line x1="'+padL+'" y1="'+(padT+4*rowH)+'" x2="'+(padL+cW)+'" y2="'+(padT+4*rowH)+'" stroke="'+c.grid+'" stroke-width="0.5"/>';
+
+  // Stage path (segment-based = time-based since each segment = 5 min)
   const n=phases.length, segW=cW/n;
   let path='',fillPath='M '+padL+' '+(padT+cH);
   phases.split('').map(Number).forEach((s,i)=>{
@@ -330,20 +340,57 @@ function hypnogram(phases,startIso){
     path+=' L '+(x+segW)+' '+y;fillPath+=' L '+(x+segW)+' '+y;
   });
   fillPath+=' L '+(padL+cW)+' '+(padT+cH)+' Z';
-  const startMs=new Date(startIso).getTime();
+
+  // Glucose panel
+  let glucSvg='';
+  if(hasGluc){
+    const gTop=padT+stageH+sepH, gBot=gTop+glucH;
+    const vals=sleepGluc.filter(p=>p[1]>0).map(p=>p[1]);
+    const gMin=Math.max(2,Math.min(...vals)-0.5), gMax=Math.min(22,Math.max(...vals)+0.5), gRange=gMax-gMin||1;
+    const toGY=v=>Math.min(gBot,Math.max(gTop,gBot-((v-gMin)/gRange)*glucH));
+    const zoneTop=Math.max(gTop,toGY(GLUC_HIGH)), zoneBot=Math.min(gBot,toGY(GLUC_LOW));
+    glucSvg+='<line x1="'+padL+'" y1="'+(padT+stageH+sepH/2)+'" x2="'+(padL+cW)+'" y2="'+(padT+stageH+sepH/2)+'" stroke="'+c.grid+'" stroke-width="0.8"/>';
+    glucSvg+='<rect x="'+padL+'" y="'+zoneTop.toFixed(1)+'" width="'+cW+'" height="'+(zoneBot-zoneTop).toFixed(1)+'" fill="'+c.zone+'"/>';
+    [GLUC_LOW,GLUC_HIGH].forEach(v=>{
+      if(v<gMin||v>gMax) return;
+      const y=toGY(v).toFixed(1);
+      glucSvg+='<line x1="'+padL+'" y1="'+y+'" x2="'+(padL+cW)+'" y2="'+y+'" stroke="'+c.ref+'" stroke-width="0.5" stroke-dasharray="2 2"/>';
+      glucSvg+='<text x="'+(padL-3)+'" y="'+(+y+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+v+'</text>';
+    });
+    const gMid=Math.round((gMin+gMax)/2), gMidY=toGY(gMid).toFixed(1);
+    glucSvg+='<line x1="'+padL+'" y1="'+gMidY+'" x2="'+(padL+cW)+'" y2="'+gMidY+'" stroke="'+c.grid+'" stroke-width="0.5"/>';
+    glucSvg+='<text x="'+(padL-3)+'" y="'+(+gMidY+3)+'" text-anchor="end" font-size="7" fill="'+c.lbl+'">'+gMid+'</text>';
+    glucSvg+='<text x="'+padL+'" y="'+(gTop+7)+'" font-size="7" fill="'+c.lbl+'" font-weight="600">mmol/L</text>';
+    let gPts=[];
+    sleepGluc.forEach(([min,val])=>{if(val>0)gPts.push(toX(min).toFixed(1)+','+toGY(val).toFixed(1));});
+    if(gPts.length>1) glucSvg+='<polyline points="'+gPts.join(' ')+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
+  }
+
+  // X-axis: tick every hour, label every 3h (or every hour if short sleep)
+  const bsHH=parseInt(startIso.slice(11,13)), bsMM=parseInt(startIso.slice(14,16));
+  const bsTotalMin=bsHH*60+bsMM;
+  const firstFullH=Math.ceil((bsTotalMin+1)/60);
+  const shortSleep=totalMins<=240;
+  const xAxisBaseY=hasGluc?H-padB:padT+stageH;
   let xlbls='';
-  phases.split('').forEach((_,i)=>{
-    const t=new Date(startMs+i*5*60*1000);
-    if(i===0||t.getMinutes()===0){
-      const x=padL+i*segW;
-      const fmt=t.toLocaleTimeString('en-US',{hour:'numeric',hour12:true}).replace(' AM','am').replace(' PM','pm');
-      if(x<padL+cW-14) xlbls+='<text x="'+x+'" y="'+(H-2)+'" text-anchor="middle" font-size="7.5" fill="'+c.lbl+'">'+fmt+'</text>';
-    }
-  });
+  for(let step=0;;step++){
+    const clockH=(firstFullH+step)%24;
+    const relMin=(firstFullH+step)*60-bsTotalMin;
+    if(relMin>totalMins+30) break;
+    const x=toX(relMin);
+    if(x>padL+cW+12) break;
+    if(x<padL-2) continue;
+    const lbl=clockH===0?'12am':clockH<12?clockH+'am':clockH===12?'12pm':(clockH-12)+'pm';
+    const isMajor=shortSleep||(step%3===0);
+    xlbls+='<line x1="'+x.toFixed(1)+'" y1="'+xAxisBaseY+'" x2="'+x.toFixed(1)+'" y2="'+(xAxisBaseY+(isMajor?5:2.5))+'" stroke="'+c.grid+'" stroke-width="1"/>';
+    if(isMajor&&x>padL+4&&x<padL+cW+12)
+      xlbls+='<text x="'+x.toFixed(1)+'" y="'+(H-3)+'" text-anchor="middle" font-size="7.5" fill="'+c.lbl+'">'+lbl+'</text>';
+  }
+
   return '<div class="svg-wrap"><svg class="chart-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">'
     +out+'<path d="'+fillPath+'" fill="'+c.stroke+'" opacity="0.04"/>'
     +'<path d="'+path+'" fill="none" stroke="'+c.stroke+'" stroke-width="1.5" stroke-linejoin="round"/>'
-    +xlbls+'</svg></div>';
+    +glucSvg+xlbls+'</svg></div>';
 }
 
 /* ── HR LINE CHART ── */
@@ -509,17 +556,8 @@ function renderDay(day){
       }
     }
 
-    h+='<div class="card wide"><div class="card-label">Sleep stages</div>'+hypnogram(sl.phases,sl.bedtime_start)+'<div class="stage-row"><div class="stage-cell"><span class="stage-name">Deep</span><span class="stage-val">'+fmtDur(sl.deep)+'</span><span class="stage-pct">'+Math.round(sl.deep/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">REM</span><span class="stage-val">'+fmtDur(sl.rem)+'</span><span class="stage-pct">'+Math.round(sl.rem/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">Light</span><span class="stage-val">'+fmtDur(sl.light)+'</span><span class="stage-pct">'+Math.round(sl.light/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">Awake</span><span class="stage-val">'+fmtDur(sl.awake)+'</span><span class="stage-pct">'+Math.round(sl.awake/total*100)+'%</span></div></div><div class="row"><span class="row-lbl">Total sleep</span><span class="row-val">'+fmtDur(sl.total_sleep)+'</span></div><div class="row"><span class="row-lbl">Efficiency</span><span class="row-val">'+sl.efficiency+'%</span></div><div class="row"><span class="row-lbl">Latency</span><span class="row-val">'+fmtDur(sl.latency)+'</span></div><div class="row"><span class="row-lbl">Restless periods</span><span class="row-val">'+sl.restless+'</span></div></div>';
+    h+='<div class="card wide"><div class="card-label">Sleep stages</div>'+hypnogram(sl.phases,sl.bedtime_start,sleepGluc,sleepMins)+'<div class="stage-row"><div class="stage-cell"><span class="stage-name">Deep</span><span class="stage-val">'+fmtDur(sl.deep)+'</span><span class="stage-pct">'+Math.round(sl.deep/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">REM</span><span class="stage-val">'+fmtDur(sl.rem)+'</span><span class="stage-pct">'+Math.round(sl.rem/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">Light</span><span class="stage-val">'+fmtDur(sl.light)+'</span><span class="stage-pct">'+Math.round(sl.light/total*100)+'%</span></div><div class="stage-cell"><span class="stage-name">Awake</span><span class="stage-val">'+fmtDur(sl.awake)+'</span><span class="stage-pct">'+Math.round(sl.awake/total*100)+'%</span></div></div><div class="row"><span class="row-lbl">Total sleep</span><span class="row-val">'+fmtDur(sl.total_sleep)+'</span></div><div class="row"><span class="row-lbl">Efficiency</span><span class="row-val">'+sl.efficiency+'%</span></div><div class="row"><span class="row-lbl">Latency</span><span class="row-val">'+fmtDur(sl.latency)+'</span></div><div class="row"><span class="row-lbl">Restless periods</span><span class="row-val">'+sl.restless+'</span></div></div>';
 
-    // Glucose during sleep
-    if(sleepGluc.length>1){
-      h+='<div class="card wide"><div class="card-label">Glucose · Sleep</div>';
-      h+=sleepGlucChart(sleepGluc,sleepMins,sl.bedtime_start);
-      if(d.gluc_avg!=null){
-        h+='<div class="gluc-stats"><div class="gluc-stat"><span class="gluc-stat-name">Avg</span><span class="gluc-stat-val">'+d.gluc_avg+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Min</span><span class="gluc-stat-val">'+d.gluc_min+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Max</span><span class="gluc-stat-val">'+d.gluc_max+'</span></div><div class="gluc-stat"><span class="gluc-stat-name">Unit</span><span class="gluc-stat-val" style="font-size:11px;padding-top:2px">mmol/L</span></div></div>';
-      }
-      h+='</div>';
-    }
 
     if(sl.hr_items&&sl.hr_items.length>2) h+='<div class="card wide"><div class="card-label">Heart rate · bpm</div>'+lineChart(sl.hr_items,sl.bedtime_start,sl.hr_14d_avg)+'<div class="row"><span class="row-lbl">Average</span><span class="row-val">'+Math.round(sl.avg_hr)+' bpm</span></div><div class="row"><span class="row-lbl">Lowest</span><span class="row-val">'+sl.low_hr+' bpm</span></div>'+(sl.hr_14d_avg?'<div class="row"><span class="row-lbl">14-day avg</span><span class="row-val">'+sl.hr_14d_avg+' bpm</span></div>':'')+'</div>';
     if(sl.hrv_items&&sl.hrv_items.length>2) h+='<div class="card wide"><div class="card-label">HRV · ms</div>'+hrvBarChart(sl.hrv_items,sl.bedtime_start,sl.hrv_14d_avg)+'<div class="row"><span class="row-lbl">Average</span><span class="row-val">'+sl.avg_hrv+' ms</span></div>'+(sl.hrv_14d_avg?'<div class="row"><span class="row-lbl">14-day avg</span><span class="row-val">'+sl.hrv_14d_avg+' ms</span></div>':'')+'</div>';
